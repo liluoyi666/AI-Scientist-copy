@@ -9,8 +9,29 @@ import requests
 
 from ai_scientist.llm import get_response_from_llm, extract_json_between_markers, create_client, AVAILABLE_LLMS
 
+"""
+def generate_ideas(...)
+生成多个不同的idea, 返回以及保存在文件中
+
+def generate_next_idea(...)
+迭代生成多个连续的idea, 返回以及保存在文件中
+
+def on_backoff(...)
+响应失败策略
+
+search_for_papers(...)
+搜索相关论文
+
+def check_idea_novelty(...)
+通过查找到的论文判断新颖性
+
+main()
+生成ideas
+"""
+
 S2_API_KEY = os.getenv("S2_API_KEY")
 
+# idea第一次生成提示词, 模板
 idea_first_prompt = """{task_description}
 <experiment.py>
 {code}
@@ -51,6 +72,7 @@ This JSON will be automatically parsed, so ensure the format is precise.
 You will have {num_reflections} rounds to iterate on the idea, but do not need to use them all.
 """
 
+# idea反思提示词, 模板
 idea_reflection_prompt = """Round {current_round}/{num_reflections}.
 In your thoughts, first carefully consider the quality, novelty, and feasibility of the idea you just created.
 Include any other factors that you think are important in evaluating the idea.
@@ -71,8 +93,7 @@ NEW IDEA JSON:
 If there is nothing to improve, simply repeat the previous JSON EXACTLY after the thought and include "I am done" at the end of the thoughts but before the JSON.
 ONLY INCLUDE "I am done" IF YOU ARE MAKING NO MORE CHANGES."""
 
-
-# GENERATE IDEAS
+# 生成多个idea
 def generate_ideas(
         base_dir,
         client,
@@ -81,8 +102,8 @@ def generate_ideas(
         max_num_generations=20,
         num_reflections=5,
 ):
+    # 是否使用已有的ideas
     if skip_generation:
-        # Load existing ideas from file
         try:
             with open(osp.join(base_dir, "ideas.json"), "r") as f:
                 ideas = json.load(f)
@@ -95,20 +116,24 @@ def generate_ideas(
         except json.JSONDecodeError:
             print("Error decoding existing ideas. Generating new ideas.")
 
+    # 读取idea种子
     idea_str_archive = []
     with open(osp.join(base_dir, "seed_ideas.json"), "r") as f:
         seed_ideas = json.load(f)
     for seed_idea in seed_ideas:
         idea_str_archive.append(json.dumps(seed_idea))
 
+    # 读取实验代码
     with open(osp.join(base_dir, "experiment.py"), "r") as f:
         code = f.read()
 
+    # 读取提示词
     with open(osp.join(base_dir, "prompt.json"), "r") as f:
         prompt = json.load(f)
 
     idea_system_prompt = prompt["system"]
 
+    # 生成多个idea
     for _ in range(max_num_generations):
         print()
         print(f"Generating idea {_ + 1}/{max_num_generations}")
@@ -118,7 +143,7 @@ def generate_ideas(
             msg_history = []
             print(f"Iteration 1/{num_reflections}")
             text, msg_history = get_response_from_llm(
-                idea_first_prompt.format(
+                idea_first_prompt.format( # 调用了idea_first_prompt作为模板
                     task_description=prompt["task_description"],
                     code=code,
                     prev_ideas_string=prev_ideas_string,
@@ -129,17 +154,17 @@ def generate_ideas(
                 system_message=idea_system_prompt,
                 msg_history=msg_history,
             )
-            ## PARSE OUTPUT
+            # 解析输出
             json_output = extract_json_between_markers(text)
             assert json_output is not None, "Failed to extract JSON from LLM output"
             print(json_output)
 
-            # Iteratively improve task.
+            # 对该idea进行多轮改进
             if num_reflections > 1:
                 for j in range(num_reflections - 1):
                     print(f"Iteration {j + 2}/{num_reflections}")
                     text, msg_history = get_response_from_llm(
-                        idea_reflection_prompt.format(
+                        idea_reflection_prompt.format( # 调用了idea_reflection_prompt作为模板
                             current_round=j + 2, num_reflections=num_reflections
                         ),
                         client=client,
@@ -147,7 +172,7 @@ def generate_ideas(
                         system_message=idea_system_prompt,
                         msg_history=msg_history,
                     )
-                    ## PARSE OUTPUT
+                    # 解析输出
                     json_output = extract_json_between_markers(text)
                     assert (
                             json_output is not None
@@ -163,7 +188,7 @@ def generate_ideas(
             print(f"Failed to generate idea: {e}")
             continue
 
-    ## SAVE IDEAS
+    # 保存ideas
     ideas = []
     for idea_str in idea_str_archive:
         ideas.append(json.loads(idea_str))
@@ -173,8 +198,7 @@ def generate_ideas(
 
     return ideas
 
-
-# GENERATE IDEAS OPEN-ENDED
+# 迭代式生成idea
 def generate_next_idea(
         base_dir,
         client,
@@ -188,6 +212,7 @@ def generate_next_idea(
 
     print(f"Generating idea {original_archive_size + 1}")
 
+    # 如果没有ideas存档则加载idea种子, 否则加载存档
     if len(prev_idea_archive) == 0:
         print(f"First iteration, taking seed ideas")
         # seed the archive on the first run with pre-existing ideas
@@ -202,6 +227,7 @@ def generate_next_idea(
             prompt = json.load(f)
         idea_system_prompt = prompt["system"]
 
+        # 迭代生成idea
         for _ in range(max_attempts):
             try:
                 idea_strings = []
@@ -212,7 +238,7 @@ def generate_next_idea(
                 msg_history = []
                 print(f"Iteration 1/{num_reflections}")
                 text, msg_history = get_response_from_llm(
-                    idea_first_prompt.format(
+                    idea_first_prompt.format( # 调用了idea_first_prompt作为模板
                         task_description=prompt["task_description"],
                         code=code,
                         prev_ideas_string=prev_ideas_string,
@@ -228,17 +254,17 @@ Scores of 0 indicate the idea failed either during experimentation, writeup or r
                     system_message=idea_system_prompt,
                     msg_history=msg_history,
                 )
-                ## PARSE OUTPUT
+                # 解析输出
                 json_output = extract_json_between_markers(text)
                 assert json_output is not None, "Failed to extract JSON from LLM output"
                 print(json_output)
 
-                # Iteratively improve task.
+                # 迭代式改进
                 if num_reflections > 1:
                     for j in range(num_reflections - 1):
                         print(f"Iteration {j + 2}/{num_reflections}")
                         text, msg_history = get_response_from_llm(
-                            idea_reflection_prompt.format(
+                            idea_reflection_prompt.format( # 调用了idea_reflection_prompt作为模板
                                 current_round=j + 2, num_reflections=num_reflections
                             ),
                             client=client,
@@ -246,7 +272,7 @@ Scores of 0 indicate the idea failed either during experimentation, writeup or r
                             system_message=idea_system_prompt,
                             msg_history=msg_history,
                         )
-                        ## PARSE OUTPUT
+                        # 解析输出
                         json_output = extract_json_between_markers(text)
                         assert (
                                 json_output is not None
@@ -265,20 +291,21 @@ Scores of 0 indicate the idea failed either during experimentation, writeup or r
                 print(f"Failed to generate idea: {e}")
                 continue
 
-    ## SAVE IDEAS
+    # 保存和返回ideas
     with open(osp.join(base_dir, "ideas.json"), "w") as f:
         json.dump(idea_archive, f, indent=4)
 
     return idea_archive
 
 
+# 退避策略的回调函数, 用于在 API 请求失败时打印退避信息
 def on_backoff(details):
     print(
         f"Backing off {details['wait']:0.1f} seconds after {details['tries']} tries "
         f"calling function {details['target'].__name__} at {time.strftime('%X')}"
     )
 
-
+# 通过文献检索API搜索相关论文, 判断想法的新颖性
 @backoff.on_exception(
     backoff.expo, requests.exceptions.HTTPError, on_backoff=on_backoff
 )
@@ -352,7 +379,7 @@ def search_for_papers(query, result_limit=10, engine="semanticscholar") -> Union
         raise NotImplementedError(f"{engine=} not supported!")
 
 
-
+# ai科学家角色设定
 novelty_system_msg = """You are an ambitious AI PhD student who is looking to publish a paper that will contribute significantly to the field.
 You have an idea and you want to check if it is novel or not. I.e., not overlapping significantly with existing literature or already well explored.
 Be a harsh critic for novelty, ensure there is a sufficient contribution in the idea for a new conference or workshop paper.
@@ -370,6 +397,7 @@ Decide a paper idea is not novel, if you have found a paper that significantly o
 </experiment.py>
 """
 
+# 新颖度提示词
 novelty_prompt = '''Round {current_round}/{num_rounds}.
 You have this idea:
 
@@ -401,7 +429,7 @@ In <JSON>, respond in JSON format with ONLY the following field:
 A query will work best if you are able to recall the exact name of the paper you are looking for, or the authors.
 This JSON will be automatically parsed, so ensure the format is precise.'''
 
-
+# 检查每个idea的新颖性, 基于文献检索结果和 LLM 判断
 def check_idea_novelty(
         ideas,
         base_dir,
@@ -496,7 +524,7 @@ if __name__ == "__main__":
     MAX_NUM_GENERATIONS = 32
     NUM_REFLECTIONS = 5
     import argparse
-
+    # 设置命令行
     parser = argparse.ArgumentParser(description="Generate AI scientist ideas")
     # add type of experiment (nanoGPT, Boston, etc.)
     parser.add_argument(
@@ -537,6 +565,7 @@ if __name__ == "__main__":
         max_num_generations=MAX_NUM_GENERATIONS,
         num_reflections=NUM_REFLECTIONS,
     )
+    # 是否检查新颖性
     if args.check_novelty:
         ideas = check_idea_novelty(
             ideas,

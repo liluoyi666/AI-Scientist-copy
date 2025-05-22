@@ -77,8 +77,7 @@ AVAILABLE_LLMS = [
     "gemini-2.5-pro-exp-03-25",
 ]
 
-# 使用一条输入获取多个响应, 最后进行统合
-# Get N responses from a single message, used for ensembling.
+# 使用一条输入获取n个响应, 最后进行统合(但目前似乎 n = 1)
 @backoff.on_exception(backoff.expo, (openai.RateLimitError, openai.APITimeoutError))
 def get_batch_responses_from_llm(
         msg,
@@ -170,7 +169,7 @@ def get_response_from_llm(
     if msg_history is None:
         msg_history = []
 
-    # 判断模型类型,并进行交互
+    # 判断模型类型, 并进行交互
     if "claude" in model:
         new_msg_history = msg_history + [
             {
