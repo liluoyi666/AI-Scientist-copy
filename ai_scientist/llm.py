@@ -8,6 +8,13 @@ import openai
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig
 
+"""
+def create_client(...)      创建客户端
+def extract_json_between_markers(...)      json处理器
+def get_response_from_llm(...)     获取一次响应
+def get_batch_responses_from_llm(...)      获取多次响应并统合
+"""
+
 # 序列最大长度
 MAX_NUM_TOKENS = 4096
 
