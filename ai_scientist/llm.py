@@ -8,8 +8,10 @@ import openai
 import google.generativeai as genai
 from google.generativeai.types import GenerationConfig
 
+# 序列最大长度
 MAX_NUM_TOKENS = 4096
 
+# 可调用的模型的名单
 AVAILABLE_LLMS = [
     # Anthropic models
     "claude-3-5-sonnet-20240620",
@@ -61,7 +63,7 @@ AVAILABLE_LLMS = [
     "gemini-2.5-pro-exp-03-25",
 ]
 
-
+# 使用一条输入获取多个响应, 最后进行统合
 # Get N responses from a single message, used for ensembling.
 @backoff.on_exception(backoff.expo, (openai.RateLimitError, openai.APITimeoutError))
 def get_batch_responses_from_llm(
@@ -77,6 +79,7 @@ def get_batch_responses_from_llm(
     if msg_history is None:
         msg_history = []
 
+    # 判断模型类型
     if 'gpt' in model:
         new_msg_history = msg_history + [{"role": "user", "content": msg}]
         response = client.chat.completions.create(
@@ -136,22 +139,24 @@ def get_batch_responses_from_llm(
         print("*" * 21 + " LLM END " + "*" * 21)
         print()
 
+    # 返回响应列表content和各响应对应的对话历史列表
     return content, new_msg_history
 
-
+# 从llm获取响应
 @backoff.on_exception(backoff.expo, (openai.RateLimitError, openai.APITimeoutError))
 def get_response_from_llm(
-        msg,
-        client,
-        model,
-        system_message,
-        print_debug=False,
-        msg_history=None,
-        temperature=0.75,
+        msg,                # 用户输入
+        client,             # 客户端
+        model,              # 模型
+        system_message,     # 系统提示词
+        print_debug=False,  # 是否输出运行时产生的信息
+        msg_history=None,   # 历史信息
+        temperature=0.75,   # 生成随机性
 ):
     if msg_history is None:
         msg_history = []
 
+    # 判断模型类型,并进行交互
     if "claude" in model:
         new_msg_history = msg_history + [
             {
@@ -285,7 +290,7 @@ def get_response_from_llm(
 
     return content, new_msg_history
 
-
+# json解析器, 解析大模型的输出
 def extract_json_between_markers(llm_output):
     # Regular expression pattern to find JSON content between ```json and ```
     json_pattern = r"```json(.*?)```"
@@ -313,7 +318,7 @@ def extract_json_between_markers(llm_output):
 
     return None  # No valid JSON found
 
-
+# 创建客户端
 def create_client(model):
     if model.startswith("claude-"):
         print(f"Using Anthropic API with model {model}.")
