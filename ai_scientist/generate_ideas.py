@@ -11,7 +11,7 @@ from ai_scientist.llm import get_response_from_llm, extract_json_between_markers
 
 """
 def generate_ideas(...)
-生成多个不同的idea, 返回以及保存在文件中
+连续生成多个不同的idea, 返回以及保存在文件中
 
 def generate_next_idea(...)
 迭代生成多个连续的idea, 返回以及保存在文件中
