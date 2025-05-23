@@ -367,3 +367,53 @@ def create_client(model):
         ), model
     else:
         raise ValueError(f"Model {model} not supported.")
+
+
+if __name__ == "__main__":
+    # 测试配置
+    test_model = "deepseek-chat"  # 也可以换成其他支持的模型
+    system_msg = "你是一个有帮助的助手，请用JSON格式回答用户问题。"
+    user_msg = "你好！请生成一个包含当前天气信息的JSON对象，城市是北京。"
+
+    try:
+        # 创建客户端并显示测试信息
+        client, model_name = create_client(test_model)
+        print(f"测试模型: {model_name}")
+        print(f"系统提示: {system_msg}")
+        print(f"用户消息: {user_msg}\n")
+
+        # 获取LLM响应
+        response_content, msg_history = get_response_from_llm(
+            msg=user_msg,
+            client=client,
+            model=model_name,
+            system_message=system_msg,
+            print_debug=True,  # 开启调试输出
+            temperature=0.7
+        )
+
+        # 打印原始响应
+        print("\n原始响应:")
+        print(response_content)
+
+        # 尝试提取JSON并验证
+        extracted_json = extract_json_between_markers(response_content)
+        if extracted_json:
+            print("\n提取的JSON:")
+            print(json.dumps(extracted_json, indent=2, ensure_ascii=False))
+            print("\nJSON验证: 格式正确")
+        else:
+            print("\n警告: 未检测到有效JSON格式")
+
+        # 打印历史记录长度
+        print(f"\n对话历史记录数: {len(msg_history)}")
+
+    except ValueError as ve:
+        print(f"\n配置错误: {ve}")
+        print("请检查: 1. 模型名称是否正确 2. 对应API密钥是否设置")
+    except Exception as e:
+        print(f"\n运行时错误: {str(e)}")
+        if "AuthenticationError" in str(e):
+            print("请检查API密钥是否正确设置")
+        elif "RateLimitError" in str(e):
+            print("API调用限额已用尽，请稍后重试")
